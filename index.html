@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Humanitarian Operations Dashboard</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 20px; background-color: #f4f4f4; }
+        .kpi-row { display: flex; gap: 10px; margin-bottom: 20px; }
+        .kpi-card { background: #004a99; color: white; padding: 20px; flex: 1; text-align: center; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .kpi-card h3 { margin: 0 0 10px 0; font-size: 0.9em; text-transform: uppercase; opacity: 0.9; }
+        .kpi-card div { font-size: 1.8em; font-weight: bold; }
+        .filter-section { background: #fff; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ccc; }
+        table { width: 100%; border-collapse: collapse; background: white; margin-top: 10px; font-size: 0.9em; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #004a99; color: white; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        #status { margin-bottom: 10px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <h1>Humanitarian Operations Dashboard</h1>
+    <div id="status">Loading data...</div>
+
+    <div class="filter-section">
+        <b>Filters:</b>
+        Region: <select id="selRegion"><option value="all">All Regions</option></select>
+        Sector: <select id="selSector"><option value="all">All Sectors</option></select>
+    </div>
+
+    <div class="kpi-row">
+        <div class="kpi-card"><h3>People in Need</h3><div id="valTarget">0</div></div>
+        <div class="kpi-card"><h3>People Reached</h3><div id="valReach">0</div></div>
+        <div class="kpi-card"><h3>Funding Gap</h3><div id="valGap">0%</div></div>
+    </div>
+
+    <table id="dataTable">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Region</th>
+                <th>Sector</th>
+                <th>Partner</th>
+                <th>Funding Gap (%)</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <script>
+        // Load the local CSV file
+        d3.csv("humanitarian_response_dataset.csv").then(data => {
+            d3.select("#status").text("Data Loaded Successfully!").style("color", "green");
+
+            // Populate Dropdowns
+            const regions = [...new Set(data.map(d => d.state_region))].sort();
+            const sectors = [...new Set(data.map(d => d.sector))].sort();
+
+            regions.forEach(r => d3.select("#selRegion").append("option").text(r).attr("value", r));
+            sectors.forEach(s => d3.select("#selSector").append("option").text(s).attr("value", s));
+
+            function update() {
+                let reg = d3.select("#selRegion").property("value");
+                let sec = d3.select("#selSector").property("value");
+
+                let filtered = data.filter(d => {
+                    return (reg === "all" || d.state_region === reg) &&
+                           (sec === "all" || d.sector === sec);
+                });
+
+                // Metrics Calculation
+                let totalPIN = d3.sum(filtered, d => +d.people_in_need || 0);
+                let totalReached = d3.sum(filtered, d => +d.people_reached || 0);
+                let totalReq = d3.sum(filtered, d => +d.funding_required_usd || 0);
+                let totalRec = d3.sum(filtered, d => +d.funding_received_usd || 0);
+
+                let gapPercent = totalReq > 0 ? ((totalReq - totalRec) / totalReq * 100) : 0;
+
+                // Update UI
+                d3.select("#valTarget").text(totalPIN.toLocaleString());
+                d3.select("#valReach").text(totalReached.toLocaleString());
+                d3.select("#valGap").text(gapPercent.toFixed(1) + "%");
+
+                // Update Table
+                let tbody = d3.select("#dataTable tbody").html("");
+                filtered.slice(0, 15).forEach(d => {
+                    let req = +d.funding_required_usd || 0;
+                    let rec = +d.funding_received_usd || 0;
+                    let g = req > 0 ? ((req - rec) / req * 100).toFixed(1) : 0;
+
+                    tbody.append("tr").html(`
+                        <td>${d.date}</td>
+                        <td>${d.state_region}</td>
+                        <td>${d.sector}</td>
+                        <td>${d.partner}</td>
+                        <td>${g}%</td>
+                    `);
+                });
+            }
+
+            // Listeners
+            d3.selectAll("select").on("change", update);
+            update();
+
+        }).catch(err => {
+            d3.select("#status").text("Error loading data: " + err.message).style("color", "red");
+            console.error(err);
+        });
+    </script>
+</body>
+</html>
